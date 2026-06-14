@@ -3,6 +3,7 @@ API 需要有额度！！！（充钱！
 
 # langchain_openai 简单案例
 核心
+```python
 from langchain_openai import ChatOpenAI # 问题： 还有其他的api接口么？有什么区别
 
 llm = ChatOpenAI(
@@ -17,6 +18,7 @@ prompt = 'str'
 response = llm.invoke(prompt)
 
 response.content # 结果，需要print。问题：response类还有其他需要注意的方法么？
+```
 
 # langgraph.graph 简单案例
 核心

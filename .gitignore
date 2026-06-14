@@ -1,0 +1,16 @@
+.env
+test.py
+.vscode/*
+
+/node_modules
+/learning
+
+docs/.vitepress/dist
+docs/.vitepress/cache
+docs/.vitepress/.temp
+
+.venv
+
+.claude
+
+AGENTS.md

@@ -2,6 +2,24 @@
 
 本文件用于追踪 `AI_agent_demo` 仓库的重要变更。
 
+## 2026-06-18
+
+### Added
+
+- 新增 `notes/Day02.md`，整理 Day02 关于多轮对话、PromptTemplate、Few-shot、输出解析和 `BaseOutputParser` 的学习笔记。
+- 新增 `demos/chapter2.ipynb`，覆盖 Chapter 2 中模型调用、Prompt 模板、Few-shot 示例、输出解析和本地 Hugging Face/Qwen 调用尝试。
+- 新增 `demos/learning_method_examples.json`，用于工程化 Few-shot 示例选择。
+
+### Changed
+
+- 更新 `pyproject.toml` 和 `uv.lock`，加入 `langchain-huggingface`、`transformers`、`torch`、`torchvision` 等本地模型调用相关依赖。
+- 为 `torch` 和 `torchvision` 配置 `pytorch-cu130` 安装源。
+- 更新 `README.md`，同步当前文件结构、学习进度、运行方式、依赖说明和配置约定。
+
+### Fixed
+
+- 恢复 `pyproject.toml` 的 `[project]` 表头，保证项目配置可以被标准工具正确解析。
+
 ## 2026-06-14
 
 ### Added

@@ -1,35 +1,50 @@
-﻿# Day03 Notes
+# Day03 Notes
+
+## 本章主题
+
+Day03 主要围绕 LangChain 的进阶组件展开，包括：
+
+- 状态管理与对话记忆。
+- 外部工具调用与 Agent 执行循环。
+- 从数据流和工作流角度理解前三天的学习内容。
 
 ## 3.1 状态管理
-对话记忆的方法与Day02中的部分思考相似，具体的简单实现可以在本章中学习
-- 全量记忆
-- 窗口记忆 (截断的全量记忆)
-- 摘要记忆
 
-### 全量记忆
-适用场景：推荐短对话，因为是记忆的全部内容
+对话记忆的实现方式与 Day02 中关于多轮对话上下文叠加的思考相似。本章重点学习三种简单记忆策略：
 
+| 记忆方式 | 核心思路 | 适用场景 |
+| --- | --- | --- |
+| 全量记忆 | 保存全部历史消息 | 短对话、需要完整上下文的任务 |
+| 窗口记忆 | 只保留最近 `N` 轮对话 | 控制 token 成本、近期上下文更重要的任务 |
+| 摘要记忆 | 将长历史压缩为摘要后继续对话 | 长对话、需要继承前文但不能无限堆叠 token 的任务 |
 
-样例：
+### 3.1.1 全量记忆
+
+适用场景：短对话。因为该方法会把全部对话历史都作为记忆内容。
+
+#### Prompt 结构
+
 ```python
 full_memory_prompt = ChatPromptTemplate.from_messages([
     ("system", "你是友好的对话助手，需基于完整的历史对话回答用户问题。"),
-    MessagesPlaceholder(variable_name="chat_history"),  # 历史消息占位符
-    ("human", "{user_input}")  # 用户当前输入
+    MessagesPlaceholder(variable_name="chat_history"),
+    ("human", "{user_input}")
 ])
 ```
-输入的列表结构与day02中的messages构造逻辑，差异在于
-1. 本例结构为List[tuple] 其中，元组1为原来dict里的key，2为原来的content
-2. 从原来的一轮存在一个list元素里变成按原来的key堆叠。
-3. MessagesPlaceholder占位符名字可以理解为assistant
 
-完整用法进源代码查看
+这个列表结构与 Day02 中直接构造 `messages` 的逻辑相似，差异在于：
+
+1. 本例结构为 `List[tuple]`，其中元组第一个元素相当于原来字典里的 role，第二个元素相当于 `content`。
+2. 原来一轮对话可以存在一个 list 元素里；这里变成按 role 顺序堆叠消息。
+3. `MessagesPlaceholder(variable_name="chat_history")` 是历史消息占位符，可以理解为运行时注入的上下文。
+
+#### 完整用法
 
 ```python
 base_chain = full_memory_prompt | llm
 
 def get_full_memory_history(session_id: str) -> BaseChatMessageHistory:
-    """根据session_id获取会话历史，不存在则创建新的历史记录"""
+    """根据 session_id 获取会话历史，不存在则创建新的历史记录。"""
     if session_id not in full_memory_store:
         full_memory_store[session_id] = InMemoryChatMessageHistory()
     return full_memory_store[session_id]
@@ -37,48 +52,61 @@ def get_full_memory_history(session_id: str) -> BaseChatMessageHistory:
 full_memory_chain = RunnableWithMessageHistory(
     runnable=base_chain,
     get_session_history=get_full_memory_history,
-    input_messages_key="user_input",  # 输入中用户问题的键名
-    history_messages_key="chat_history"  # 传入提示词的历史消息键名
+    input_messages_key="user_input",
+    history_messages_key="chat_history"
 )
 
-# 测试多轮对话（指定session_id=user_001，隔离不同用户）
 config = {"configurable": {"session_id": "user_001"}}
 
-# 第一轮对话
-response1 = full_memory_chain.invoke({"user_input": "我叫小明，喜欢编程"}, config=config)
+response1 = full_memory_chain.invoke(
+    {"user_input": "我叫小明，喜欢编程"},
+    config=config
+)
 print("助手回复1：", response1.content)
 
 for msg in get_full_memory_history("user_001").messages:
     print(f"{msg.type}: {msg.content}")
 ```
-分析代码工作流：
-pipline               ->
-memory_store (Global) ->
-                           RunnableWithMessageHistory(runnable=pipline, get_session_history=memory_store_function) ->  自定义函数调取memory_store历史
 
-memory_store为字典，value为InMemoryChatMessageHistory类
+#### 工作流理解
 
-RunnableWithMessageHistory类 封装 pipline和InMemoryChatMessageHistory 继承了pipline的主要功能，所以可以直接用invoke
+```text
+pipeline
+  -> RunnableWithMessageHistory(
+       runnable=pipeline,
+       get_session_history=memory_store_function
+     )
+  -> memory_store[session_id]
+  -> InMemoryChatMessageHistory
+```
 
-RunnableWithMessageHistory类封装 功能是在pipline基础上多了一个记忆存贮，到memory_store
+关键理解：
 
-memory_store_function定义时用的是全局变量，个人不太习惯，但是可能对于固定的工作流来讲比较方便。另一个原因可能是memory_store_function需要传参到封装中，如果有其他的需要额外输入的话，函数传参结构有点麻烦。
+- `memory_store` 是字典，value 是 `InMemoryChatMessageHistory` 实例。
+- `RunnableWithMessageHistory` 封装了 pipeline 和历史消息管理逻辑。
+- 这个封装继承了 pipeline 的主要调用方式，因此可以直接使用 `.invoke()`。
+- 它在 pipeline 之外增加了记忆存储和历史注入逻辑。
+- `memory_store_function` 使用全局变量，个人不太习惯，但对固定工作流比较方便。
+- 如果需要额外参数，`memory_store_function` 的传参结构可能会变复杂。
+- `RunnableWithMessageHistory.invoke()` 返回的是 `AIMessage` 类。
 
-RunnableWithMessageHistory类 invoke时返回的的AIMessage类。
+### 3.1.2 窗口记忆
 
-### 窗口记忆
-适用场景：保留最近的N轮对话（N用k参数控制），说不好
+适用场景：只保留最近 `N` 轮对话，`N` 通常由 `k` 参数控制。
 
-所有逻辑和api用法与全量记忆一致，仅仅只是在定义get_session_history上加上了根据K (Global)覆盖的限制
+窗口记忆的整体逻辑和 API 用法与全量记忆一致，区别主要在 `get_session_history` 的定义中增加了窗口截断逻辑。
 
-####
-有关幻觉：
-以下结果是我在inputs中第三次改动和运行后的结果。也就是说step5根据input运行了三次。
-第一次：原始input。得到类似示例的回答
-第二次：在问城市后继续加问名字（二者在同一轮），测试是否是真的遗忘。也得到了 没有报名字 类似的回复，且回复较为简练
-第三次：在问城市后继续加问名字（二者在不同轮）。如下所示，出现了幻觉，且回答也十分复杂
+#### 幻觉现象记录
 
-问题：这三次应该都是全新对话，如跑第二次的时候，并没有注入和覆盖第一轮任何信息.它们的差异和window_memory_store['user_002']没有重置有关系么,虽然本身模型的概率预测是主要因素？毕竟window_memory_store没有重置的话，其内的footprint和ID信息应该是三次共享的。
+以下结果来自对 `inputs` 的第三次改动和运行，也就是同一段 step5 逻辑根据不同输入运行了三次。
+
+1. 第一次：使用原始 input，得到类似示例的回答。
+2. 第二次：在询问城市后继续询问名字，二者在同一轮中，测试是否真的遗忘。结果是没有报出名字，回复也较简练。
+3. 第三次：在询问城市后继续询问名字，二者在不同轮中。如下所示，出现了幻觉，回答也更复杂。
+
+> 问题：这三次理论上应该都是全新对话。比如跑第二次时，并没有注入和覆盖第一轮信息。它们的差异是否和 `window_memory_store["user_002"]` 没有重置有关？虽然模型概率预测是主要因素，但如果 `window_memory_store` 没有重置，其 footprint 和 ID 信息可能是三次共享的。
+
+示例结果：
 
 ```text
 第1轮 - 助手回复： 小红你好呀！这个名字真可爱，像课本里会偷偷给同桌塞薄荷糖的女生～
@@ -113,10 +141,12 @@ ai: 你刚才提到自己叫**林小艺**呀～✨
 （需要我把你的名字编成藏在铅笔盒里的萤火虫密码，还是让作业本上的签名突然长出小翅膀？）
 ```
 
-### 摘要记忆
-适用场景：前对话过长，需要新对话继承前文内容
+### 3.1.3 摘要记忆
 
-关键代码：
+适用场景：当前对话过长，但新对话仍需要继承前文内容。
+
+#### 关键代码
+
 ```python
 summary_base_chain = (
     RunnablePassthrough.assign(
@@ -132,39 +162,72 @@ summary_base_chain = (
     | llm
 )
 ```
-chat_summary用lambda把传入的x中的所有历史都以"\n"聚合成了一个str作为总历史记录
 
-RunnablePassthrough.assign的功能还需细致学习，比如为什么需要这个在chain里
+`chat_summary` 使用 `lambda` 将传入的 `x["chat_history"]` 中所有历史消息用 `"\n"` 聚合成一个字符串，作为总历史记录输入摘要链。
 
-代码工作流：
+#### 待继续理解
 
-pipline (summary_base_chain)  ->
-summary_memory_store (Global) ->
-                           RunnableWithMessageHistory(runnable=pipline, get_session_history=memory_store_function) ->  自定义函数调取memory_store历史
+- `RunnablePassthrough.assign` 的功能还需要进一步学习。
+- 需要理解为什么这里必须将它放在 chain 中。
 
-与前两个流程的区别不大
+#### 工作流理解
 
-Note：手动实现流程更符合我的代码习惯，果然还是只能适应面向过程的方式
+```text
+pipeline(summary_base_chain)
+  -> RunnableWithMessageHistory(
+       runnable=pipeline,
+       get_session_history=memory_store_function
+     )
+  -> summary_memory_store[session_id]
+  -> summary text
+  -> summary_memory_prompt
+  -> llm
+```
 
-## 3.2 外部行动层（Tool）
-调用外部工具
-langchain.agents下的create_agent函数
+与全量记忆和窗口记忆相比，摘要记忆的结构差异不大，核心区别是中间多了一步历史压缩。
+
+> Note：手动实现流程更符合我的代码习惯，果然还是更适应面向过程的方式。
+
+## 3.2 外部行动层：Tool
+
+Tool 的目标是让模型调用外部工具完成动作。
+
+### 3.2.1 Agent 与 `create_agent`
+
+`langchain.agents` 下的 `create_agent` 函数用于创建一个 agent graph。它会循环调用工具，直到满足停止条件。
+
+原文说明：
+
+```text
 Creates an agent graph that calls tools in a loop until a stopping condition is met.
+```
 
-langchain.agents 组件实际是在graph逻辑下的
+理解：
 
-create_agent的debug=True的情况下，虽然能打印log，但是要理清楚agent内部的循环记忆拼接和更新方式还需要看一下源代码。大致理解是根据全量记忆合并Human，Tool和AI message
+- `langchain.agents` 组件实际是在 graph 逻辑下运行的。
+- `create_agent(debug=True)` 可以打印 log。
+- 如果要理清 agent 内部的循环、记忆拼接和消息更新方式，还需要阅读源代码。
+- 当前粗略理解是：agent 会合并 `HumanMessage`、`ToolMessage` 和 `AIMessage` 形成全量过程上下文。
 
-### 案例3.2温度转换
+### 3.2.2 案例：温度转换
 
-TemperatureConvertInput(BaseModel)是为了继承BaseModel变成一个可校验、可序列化、可生成 schema 的“数据模型”类
+`TemperatureConvertInput(BaseModel)` 继承 `BaseModel` 后，会成为一个可校验、可序列化、可生成 schema 的数据模型类。
 
-基本格式
+基本格式：
 
+```python
 class 类名(BaseModel):
     字段名: 字段类型 = Field(...)
+```
 
-字段类型作为被校验的类型,Field给这个字段添加说明，description为llm提供描述性性校验。Field有其他约束校验的方法
+理解：
+
+- 字段类型用于校验输入类型。
+- `Field` 给字段添加说明。
+- `description` 可以为 LLM 提供描述性校验信息。
+- `Field` 还有其他约束校验方法。
+
+#### 工具定义
 
 ```python
 @tool(args_schema=TemperatureConvertInput)
@@ -174,40 +237,100 @@ def temperature_converter(temperature: float, from_unit: str) -> str:
         return f"错误：单位'{from_unit}'不合法，仅支持'celsius'或'fahrenheit'"
 
     if from_unit == "celsius":
-        fahrenheit = temperature * 9/5 + 32
+        fahrenheit = temperature * 9 / 5 + 32
         return f"{temperature}摄氏度 = {fahrenheit:.2f}华氏度"
-    else:
-        celsius = (temperature - 32) * 5/9
-        return f"{temperature}华氏度 = {celsius:.2f}摄氏度"
+
+    celsius = (temperature - 32) * 5 / 9
+    return f"{temperature}华氏度 = {celsius:.2f}摄氏度"
 
 tools = [temperature_converter]
 ```
-单位判断这里是在工具定义里了，但是实际上，单位判断也应该是校验的一部分，如果能放在class里设定的话应该会让结构更加清晰。也就是说，工具只做转换，不涉及校验，只让BaseModel做校验。
 
+这里的单位判断放在工具函数中。但更理想的结构是：单位判断属于输入校验，应该尽量放在 `BaseModel` 中。这样工具只负责转换，不负责校验。
 
-！！！重要
-query = "将237开尔文转换为华氏度" 时
-```python
-    if from_unit not in ["celsius", "fahrenheit"]:
-        return f"错误：单位'{from_unit}'不合法，仅支持'celsius'或'fahrenheit'"
+#### 重要观察：工具边界
+
+当 query 为：
+
+```text
+将237开尔文转换为华氏度
 ```
-并没有生效，根据log，模型在调用到工具前首先进行了单位判断和自我转换，或者说是过了一遍loop，在发现校验失败以后，在下一轮loop里先把输入改成了可以通过校验的celsius。这是不符合现有的工具设计逻辑的。我在把```text """温度单位转换工具""" ```换成了 ```text """只支持摄氏度和华氏度之间的互相转换，不支持开尔文。"""```后，模型才会停止调用工具，但是还是根据自身推理给出了结果。但是有一个问题在于，描述性支持不能保证硬约束。第二点，我们其实是希望如果模型在调用工具时直接输出报错的，而不是输出一个所谓的弥补措施，因此，需要的是校验失败后的工具截断。description 很重要
 
-这个问题说明了一个需要考虑的问题，怎么设定agent的任务边界。从结果来看，似乎流程完成了query的请求，但实际上，从流程看这是危险的。因为给出的答案是在超越工具边界的基础上进行的，但是我们很难判断这个结果是在边界内还是外得到的。除非我们加了一些看上去比较硬性的描述性约束。
+以下逻辑没有按预期直接生效：
 
-结果论而言，我们设定agent是为了query跑通。
-过程论而言，query跑通重要，但是我们更想知道query跑通的主要轨迹来确保非幻觉，至少在直接给出结果时，还需要包括：1.初始query校验是否通过；2.调用tool前对query更改的摘要和流程
+```python
+if from_unit not in ["celsius", "fahrenheit"]:
+    return f"错误：单位'{from_unit}'不合法，仅支持'celsius'或'fahrenheit'"
+```
 
-### @tool
-description: Agent 判断 “何时调用该工具” 的核心依据
-infer_schema: 控制是否自动从函数的类型注解推导参数 schema
+根据 log，模型在调用工具前先进行了单位判断和自我转换。或者说，它先过了一轮 loop，发现校验失败后，在下一轮 loop 中把输入改成了可以通过校验的 `celsius`。
 
+这不符合当前工具设计逻辑。后来将 docstring 从：
 
+```text
+温度单位转换工具
+```
 
+改成：
 
-### 我的主要工具需求总结
+```text
+只支持摄氏度和华氏度之间的互相转换，不支持开尔文。
+```
 
+模型才停止调用工具，但仍然根据自身推理给出了结果。
 
-## 工作流总结
+问题在于：描述性约束不能保证硬约束。更理想的行为是：模型在调用工具校验失败时直接输出报错，而不是给出所谓的弥补措施。因此需要设计校验失败后的工具截断机制。
 
-我更习惯把这三天的学习总结为数据流和工作流，尝试找一种宏观的总体架构来理解和串联不同的名词和过程。
+这个现象说明：Agent 的任务边界需要被认真设计。
+
+- 从结果论看，流程完成了 query 的请求。
+- 从过程论看，这个结果是危险的，因为答案可能是在超越工具边界的基础上得到的。
+- 如果希望结果可审计，直接给出结果时至少应包括：
+  1. 初始 query 校验是否通过。
+  2. 调用 tool 前是否改写了 query。
+  3. query 改写的摘要和流程。
+
+### 3.2.3 `@tool`
+
+关键参数：
+
+- `description`：Agent 判断何时调用该工具的核心依据。
+- `infer_schema`：控制是否自动从函数类型注解推导参数 schema。
+
+### 3.2.4 Agent 代码运行
+
+`langchain_experimental` 部分建议后续更新到 `langsmith` 和 `deepagents` 的相关调用。
+
+### 3.2.5 文件查询与 CLI 模拟
+
+文件查询 demo 中，输入以 `while True` 对话框形式开启，输入 `quit` 退出，模仿 Claude Code 或 Codex CLI。
+
+另外看到一种新的 pipeline 方式：
+
+```python
+agent = prompt | llm.bind_tools(tools)
+```
+
+原版 GitHub 文件中使用的是 `create_agent`。
+
+## 3.3 工作流总结
+
+我更习惯把这三天的学习总结为数据流和工作流，尝试找一种宏观架构来理解和串联不同的名词与过程。
+
+当前可以粗略总结为：
+
+```text
+用户输入
+  -> prompt / messages
+  -> model / chat_model
+  -> parser / memory / tool
+  -> chain / agent / graph
+  -> 输出或外部动作
+```
+
+后续学习重点：
+
+- 不同记忆策略的成本、可靠性和边界。
+- tool schema 与硬校验的关系。
+- agent 内部消息循环和工具调用轨迹。
+- 用工作流视角重新组织 LangChain、LangGraph 和 Agent 的概念。

@@ -2,6 +2,19 @@
 
 本文件用于追踪 `AI_agent_demo` 仓库的重要变更。
 
+## 2026-06-20
+
+### Added
+
+- 新增并同步 Chapter 3 相关内容，包括 `demos/chapter3.ipynb` 和 `notes/Day03.md`。
+- 新增文件工具/LLM 调用产生的示例文件：`demos/llm诗词.txt` 和 `demos/test.txt`。
+
+### Changed
+
+- 优化 `notes/Day03.md` 的 Markdown 层级与正文结构，按状态管理、Tool/Agent 和工作流总结重新组织内容。
+- 更新 `README.md`，同步 Day03 学习进度、Chapter 3 demo 和新增示例文件。
+- 保留并同步 `demos/chapter3.ipynb` 的最新运行输出。
+
 ## 2026-06-18
 
 ### Added

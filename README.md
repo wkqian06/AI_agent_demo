@@ -21,14 +21,17 @@ AI_agent_demo/
     Day01.md                        # Day01 学习笔记
     Day02.md                        # Day02 学习笔记
     Day03.md                        # Day03 学习笔记
+    Day04.md                        # Day04 学习笔记
   demos/
     api_test.ipynb                  # API 配置与调用测试
     chapter1_demo.ipynb             # Chapter 1 demo
     chapter2.ipynb                  # Chapter 2 demo
     chapter3.ipynb                  # Chapter 3 demo
+    chapter4.ipynb                  # Chapter 4 demo
     learning_method_examples.json   # Few-shot 学习方法示例数据
     llm诗词.txt                     # 文件工具/LLM 生成示例
     test.txt                        # 文件工具生成的空文件示例
+    knowledge_base/                 # RAG 文档加载示例文件
 ```
 
 ## 学习进度
@@ -36,6 +39,7 @@ AI_agent_demo/
 - Day01：`langchain_openai` 基础调用、`langgraph.graph` 状态流转示例。
 - Day02：多轮对话 role 结构、PromptTemplate、FewShotPromptTemplate、输出解析、BaseOutputParser、本地 Hugging Face/Qwen 模型调用尝试。
 - Day03：对话记忆、`RunnableWithMessageHistory`、窗口记忆、摘要记忆、Tool 调用、Agent 执行循环和文件工具实践。
+- Day04：LCEL/Runnable 串联、`RunnableBranch`、错误处理、fallback 和 RAG 文档加载器实践。
 
 ## 运行约定
 

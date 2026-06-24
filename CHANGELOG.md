@@ -2,6 +2,19 @@
 
 本文件用于追踪 `AI_agent_demo` 仓库的重要变更。
 
+## 2026-06-24
+
+### Added
+
+- 新增 `notes/Day04.md`，记录 LCEL/Runnable 串联、`RunnableBranch`、错误处理、fallback 和 RAG 文档加载器学习笔记。
+- 新增 `demos/chapter4.ipynb`，覆盖 Chapter 4 应用级系统设计与 RAG 实践。
+- 新增 `demos/knowledge_base/` 示例文件，用于 RAG 文档加载器测试。
+
+### Changed
+
+- 优化 `notes/Day04.md` 的 Markdown 层级、表格、代码块和说明结构，保证渲染清晰。
+- 更新 `README.md`，同步 Day04、chapter4 demo 和 knowledge_base 示例目录。
+
 ## 2026-06-20
 
 ### Added
